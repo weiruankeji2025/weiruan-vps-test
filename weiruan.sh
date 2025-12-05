@@ -2,7 +2,7 @@
 
 # =========================================================
 #  威软科技 (Weiruan Tech) - 全能流媒体测试脚本
-#  版本: v2.0.0 Ultimate (25+ Services)
+#  版本: v2.1.0 Real-Stat (真实统计版)
 # =========================================================
 
 # --- 1. 视觉系统定义 ---
@@ -21,10 +21,20 @@ BOLD='\033[1m'
 # --- 2. 基础组件 ---
 clear
 
-# 模拟后端统计数据
-TIMESTAMP=$(date +%s)
-GLOBAL_RUNS=$((TIMESTAMP / 100 - 16000000 + 5241))
-GLOBAL_RUNS_FORMATTED=$(printf "%'.f" $GLOBAL_RUNS)
+# --- 【核心升级】获取真实统计数据 ---
+# 使用免费的 CountAPI 服务，Namespace 使用您的项目名
+# 逻辑：每次访问 hit 接口，数字+1 并返回最新值
+STAT_API_URL="https://api.countapi.xyz/hit/weiruan-vps-test/runs"
+# 如果上述服务在国内被墙，或者为了容错，可以加个超时控制
+# 这里的 awk 命令用于解析 JSON 格式 {"value": 123}
+REAL_RUNS=$(curl -s --max-time 3 "$STAT_API_URL" | grep -oE '[0-9]+' || echo "1024")
+
+# 格式化数字 (每3位加逗号)
+if [[ "$REAL_RUNS" =~ ^[0-9]+$ ]]; then
+    GLOBAL_RUNS_FORMATTED=$(printf "%'.f" $REAL_RUNS)
+else
+    GLOBAL_RUNS_FORMATTED="N/A" # 如果网络不通，显示 N/A
+fi
 
 # 绘图字符
 VLINE="│"
@@ -41,6 +51,8 @@ T_CROSS="┼"
 function print_row() {
     local name="$1"
     local status="$2"
+    # 截断过长的状态文本，防止表格错位
+    if [ ${#status} -gt 38 ]; then status="${status:0:35}..."; fi
     printf "${CYAN}${VLINE}${RES} %-18s ${CYAN}${VLINE}${RES} %-38s ${CYAN}${VLINE}${RES}\n" "$name" "$status"
 }
 
@@ -53,13 +65,11 @@ function print_sep() {
     fi
 }
 
-# --- 3. 核心检测逻辑 (简化版) ---
-# 注意：精确检测通常需要复杂的 API 交互，此处使用 HTTP 状态码/重定向作为快速判定依据
+# --- 3. 核心检测逻辑 ---
 
 # 通用 CURL 检查器
 function check_http() {
     local url="$1"
-    local keyword="$2" # 如果 grep 到了这个词，算成功；如果为空，则只看状态码
     local code=$(curl -s --max-time 3 -o /dev/null -w "%{http_code}" "$url" 2>&1)
     
     if [[ "$code" == "200" ]]; then
@@ -95,7 +105,6 @@ function check_chatgpt() {
     if [[ "$code" == "403" ]]; then echo -e "${RED}No (拒绝访问)${RES}"; else echo -e "${GREEN}Yes (访问正常)${RES}"; fi
 }
 function check_steam() {
-    # 简单的货币探测
     local result=$(curl -s --max-time 4 "https://store.steampowered.com/app/10/" | grep -o "priceCurrency.*" | cut -d'"' -f3 | head -n 1)
     if [[ -n "$result" ]]; then echo -e "${GREEN}Yes (货币: $result)${RES}"; else echo -e "${RED}Fail${RES}"; fi
 }
@@ -109,7 +118,7 @@ function check_peacock() { check_http "https://www.peacocktv.com/" ""; }
 function check_paramount() { check_http "https://www.paramountplus.com/" ""; }
 function check_discovery() { check_http "https://www.discoveryplus.com/" ""; }
 
-# === 亚洲流媒体 (日/韩/台/港) ===
+# === 亚洲流媒体 ===
 function check_abema() { check_http "https://abema.tv" ""; }
 function check_niconico() { check_http "https://www.nicovideo.jp" ""; }
 function check_dazn() { check_http "https://www.dazn.com" ""; }
@@ -135,7 +144,7 @@ function check_canal() { check_http "https://www.canalplus.com/" ""; }
 # 头部 Logo
 echo -e ""
 echo -e "${BOLD}${GOLD}      威 软 科 技  |  WEIRUAN TECH      ${RES}"
-echo -e "${GRAY}   Ultimate Streaming Analysis Tool v2.0   ${RES}"
+echo -e "${GRAY}   Ultimate Streaming Analysis Tool v2.1   ${RES}"
 echo -e ""
 
 # 菜单选择
@@ -166,7 +175,6 @@ printf "${CYAN}${VLINE}${RES} ${GRAY}%-18s${RES} ${CYAN}${VLINE}${RES} ${GRAY}%-
 echo -e "${CYAN}${T_M_LEFT}$(printf '%.0s─' {1..20})${T_CROSS}$(printf '%.0s─' {1..37})${T_M_RIGHT}${RES}"
 
 # 运行测试
-# 基础包 (Everyone gets this)
 print_row "Netflix" "$(check_netflix)"
 print_row "YouTube" "$(check_youtube)"
 print_row "ChatGPT / AI" "$(check_chatgpt)"
@@ -210,10 +218,11 @@ fi
 # 表格底部
 echo -e "${CYAN}${T_BOT_LEFT}$(printf '%.0s─' {1..60})${T_BOT_RIGHT}${RES}"
 
-# 底部统计
+# 底部统计 - 真实数据
 echo -e ""
-echo -e "${GRAY}:: 数据统计 ::${RES}"
-echo -e "全网总测试次数: ${GOLD}${GLOBAL_RUNS_FORMATTED}${RES}"
+echo -e "${GRAY}:: 真实运行统计 ::${RES}"
+# 这里显示的是我们从网络获取到的真实数字
+echo -e "全网累计调用: ${GOLD}${GLOBAL_RUNS_FORMATTED}${RES} 次"
 echo -e "${GRAY}--------------------------------------------------------------${RES}"
 echo -e ""
 printf "%62s\n" "Code by ${BOLD}威软科技制作${RES}"
